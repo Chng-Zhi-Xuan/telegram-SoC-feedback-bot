@@ -24,7 +24,7 @@ const genesisAdmin = 426938277;
 const bot = new Telegraf(process.env.TOKEN)
 bot.start((ctx) => {
   console.log('started:', ctx.from.id);
-  return ctx.reply('Your command is my will ' + ctx.from.first_name + '.');
+  return ctx.reply('Your command is my will, ' + ctx.from.first_name + '.');
 })
 
 /*Variable Declaration*/
@@ -44,7 +44,6 @@ function initializeUserMap(){
 /*Object Definitions*/
 function QuestionSet(questionSetName){
   this.name = questionSetName;
-  this.numQuestions = 0;
   this.questions = [];
 }
 
@@ -71,7 +70,7 @@ function addQuestionSet(questionSetName, ctx){
     resultBool = false;
     
   } else {
-    questionSets.set(questionSetName, QuestionSet(questionSetName));
+    questionSets.set(questionSetName, new QuestionSet(questionSetName));
   }
   
   ctx.reply(questionSetName + resultString);
@@ -92,7 +91,6 @@ function editQuestionSetName(oldQuestionSetName, newQuestionSetName, ctx){
   if(questionSets.has(oldQuestionSetName)){
     if(!questionSets.has(newQuestionSetName)){
       questionSets.set(newQuestionSetName, new QuestionSet(newQuestionSetName));
-      questionSets.get(newQuestionSetName).numQuestions = questionSets.get(oldQuestionSetName).numQuestions;
       questionSets.get(newQuestionSetName).questions = questionSets.get(oldQuestionSetName).questions;
       questionSets.delete(oldQuestionSetName);
       resultBool = true;
@@ -150,20 +148,21 @@ PreReq:
 var- questionString
 QuestionSet - questionSet (QuestionSet exists)
 */
-function addQuestionToQuestionSet(questionString, questionSet, ctx){
+function addQuestionToQuestionSet(questionSet, questionString, ctx){
   
-  var resultString = "Successfull question addition"
-  var resultBool = true;
-      
-  if(typeof questionSets.get(questionSet).questions.push(new Question(questionString) != ++questionSet.numQuestions)){
-    questionSet.numQuestions--;
-    resultString = "Fail to add " + questionString;
-    resultBool = false;
+  var resultBool = false;
+  if(questionSets.has(questionSet)){
+    var arr = questionSets.get(questionSet).questions;
+    arr.push(new Question(questionString))
+    ctx.reply("Successfully added question to question set " + questionSet);
+    console.log("Successfully added question to question set " + questionSet); 
+    resultBool = true;
+  }else{
+    ctx.reply("Question set " + questionSet + " does not exist");
+    console.log("Question set " + questionSet + " does not exist");
   }
   
-  ctx.reply(resultBool + " to QuestionSet " + questionSet.id);
-  console.log(resultBool + " to QuestionSet " + questionSet.id);
-  return resultBool;
+  return resultBool
 }
 
 /*
@@ -171,13 +170,14 @@ PreReq:
 var- questionNum  (question exists)
 QuestionSet - questionSet (QuestionSet exists)
 */
-function deleteQuestionFromQuestionSet(questionNum, questionSet, ctx){
+function deleteQuestionFromQuestionSet(questionSet, questionNum, ctx){
 
   var resultBool = false;
   
   if(questionSets.has(questionSet)){
-    if(questionSets.get(questionSet).numQuestions <= questionNum){
-      questionSets.get(questionSet).questions.splice(questionNum - 1, 1);
+    var arr = questionSets.get(questionSet).questions;
+    if(questionNum <= arr.length){
+      arr.splice(questionNum - 1, 1);
       ctx.reply("Question " + questionNum + " successfully deleted from " + questionSet);
       console.log("Question " + questionNum + " successfully deleted from " + questionSet);
       resultBool = true;
@@ -202,7 +202,14 @@ function listQuestionsFromQuestionSet(questionSet, ctx){
   var resultBool = false;
   
   if(questionSets.has(questionSet)){
-    questionS
+    var num = 1;
+    var print = "";
+    var arr = questionSets.get(questionSet).questions;
+    for(var x = 0; x < arr.length; x++){
+      print += num + ". " +  arr[x].question + "\n";
+    }
+    ctx.reply(print);
+    console.log(print);
     resultBool = true;
   }else{
     ctx.reply("Question set " + questionSet + " does not exist");
@@ -306,18 +313,48 @@ bot.hears(/(.*)/, (ctx) => {
             listQuestionSets(ctx);
             return;
         
-        case "/slut":
+      case "/addQ":
+        
+            if (messageArr.length == 3 && isAlphaNumeric(messageArr[2])) {
+              addQuestionToQuestionSet(messageArr[1], messageArr[2], ctx)
+            } else {
+              ctx.reply("Invalid name or number of arguments after command.\nTry /addQ questionSet question")
+            }
+        
+            return;
+        
+      case "/delQ" :
+            
+            if (messageArr.length == 3 && isAlphaNumeric(messageArr[2])) {
+              deleteQuestionFromQuestionSet(messageArr[1], messageArr[2], ctx)
+            } else {
+              ctx.reply("Invalid name or number of arguments after command.\nTry /delQ questionSet questionNum")
+            }
+        
+            return;
+        
+      case "/listQ" :
+        
+            if (messageArr.length == 2 && isAlphaNumeric(messageArr[1])) {
+              listQuestionsFromQuestionSet(messageArr[1], ctx)
+            } else {
+              ctx.reply("Invalid name or number of arguments after command.\nTry /listQ questionSet")
+            }
+        
+            return;
+        
+      case "/slut":
             ctx.reply('We both are ;)');
             return;
         
-        case "/help":
+      case "/help":
             
             ctx.reply(help());
             return;
         
-        default:
-            ctx.reply('Sorry master, I do not understand.');
-            return;
+      default:
+           ctx.reply('Sorry master, I do not understand.');
+           return;
     }
     
   } else { //For the non-admins 
