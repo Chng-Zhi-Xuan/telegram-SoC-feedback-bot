@@ -18,7 +18,6 @@ const Markup = require('telegraf/markup');
 const admins = [[377961259, "Dominic"], [426938277, "Zhi Xuan"]]
 
 var userMap = initializeUserMap();
-var qSetMap = new Map();
 var questionSets = new Map();
 
 const bot = new Telegraf(process.env.TOKEN);
@@ -40,6 +39,7 @@ bot.catch((err) => {
 
 function QuestionSet(questionSetName){
   this.name = questionSetName;
+  this.isLocked = false;
   this.questions = [];
 }
 
@@ -128,8 +128,8 @@ function addQuestionToQuestionSet(questionSet, questionString, ctx){
   if(questionSets.has(questionSet)){
     var arr = questionSets.get(questionSet).questions;
     arr.push(new Question(questionString))
-    ctx.reply("Successfully added question to question set " + questionSet);
-    console.log("Successfully added question to question set " + questionSet); 
+    ctx.reply("\"" + questionString + "\" successfully added to question set " + questionSet + " as #" + arr.length); 
+    console.log("\"" + questionString + "\" successfully added to question set " + questionSet + " as #" + arr.length); 
     resultBool = true;
   }else{
     ctx.reply("Question set " + questionSet + " does not exist");
@@ -162,18 +162,47 @@ function deleteQuestionFromQuestionSet(questionSet, questionNum, ctx){
   return resultBool
 }
 
+function editQuestionFromQuestionSet(questionSet, questionNum, questionString, ctx){
+
+  var resultBool = false;
+  
+  if(questionSets.has(questionSet)){
+    var arr = questionSets.get(questionSet).questions;
+    if(questionNum <= arr.length){
+      arr.splice(questionNum - 1, 1, new Question(questionString));
+      ctx.reply("Question " + questionNum + " successfully edited from " + questionSet);
+      console.log("Question " + questionNum + " successfully edited from " + questionSet);
+      resultBool = true;
+    }else{
+      ctx.reply("Question number " + questionNum + " does not exist");
+      console.log("Question number " + questionNum + " does not exist");
+    }
+  }else{
+    ctx.reply("Question set " + questionSet + " does not exist");
+    console.log("Question set " + questionSet + " does not exist");
+  }
+  
+  return resultBool
+}
+
 function listQuestionsFromQuestionSet(questionSet, ctx){
   
   var resultBool = false;
   
   if(questionSets.has(questionSet)){
     var num = 1;
-    var print = "";
+    var print = "Here are your questions nyaa\n\n";
     var arr = questionSets.get(questionSet).questions;
-    for(var x = 0; x < arr.length; x++){
-      print += num + ". " +  arr[x].question + "\n";
-      num++;
+    
+    if (arr.length == 0) {
+      print += "No questions found :(";
+    } else {
+      for(var x = 0; x < arr.length; x++){
+        print += num + ". " +  arr[x].question + "\n";
+        num++;
+      }
     }
+    
     ctx.reply(print);
     console.log(print);
     resultBool = true;
@@ -185,41 +214,78 @@ function listQuestionsFromQuestionSet(questionSet, ctx){
   return resultBool;
 }
 
-function addUserResponseToQuestion(questionSet, question, response, userID, ctx){
+function addUserResponseToQuestion(questionSet, questionNum, response, userID, ctx){
   
   var qSet = questionSets.get(questionSet);
   
   console.log("Inside aURTQ: ");
   console.log("qSet: " + qSet.name);
   
-  var q = qSet.questions[parseInt(question)];
-  var ur = q.users_response;
-  if(ur.has(userID)){
-    ctx.reply("Replaced response by userID " + userID + " to question " + question + " from questionSet " + questionSet);
-    console.log("Replaced response by userID " + userID + " to question " + question + " from questionSet " + questionSet);
+  if(0 < questionNum && questionNum <= qSet.questions.length){
+    var q = qSet.questions[questionNum - 1];
+    var ur = q.users_response;
+    if(ur.has(userID)){
+
+      ur.set(userID, response);
+
+      ctx.reply(response + " overwrited in " + questionSet + " #" + questionNum);
+      console.log(response + " overwrited in " + questionSet + " #" + questionNum + " from: " + userID);
+
+    }else{
+      ur.set(userID, response);
+
+      //ctx.reply(response + " saved in " + questionSet + " #" + questionNum);
+      console.log(response + " saved in " + questionSet + " #" + questionNum + " from: " + userID);
+    }
+    return true;
   }else{
-    ur.set(userID, response);
-    ctx.reply("Response by userID " + userID + " added to question " + question + " from questionSet " + questionSet);
-    console.log("Response by userID " + userID + " added to question " + question + " from questionSet " + questionSet);
+    ctx.reply("Question number out of range");
+    console.log("Question number out of range");
   }
-  return true;
 }
 
-function deleteUserResponseFromQuestion(questionSet, question, userID, ctx){
+function deleteUserResponseFromQuestion(questionSet, questionNum, userID, ctx){
   
   var qSet = questionSets.get(questionSet);
-  var q = qSet.questions[question];
-  var ur = q.users_response;
-  ur.delete(userID);
-  ctx.reply("Response by userID " + userID + " deleted from question " + question + " from questionSet " + questionSet);
-  console.log("Response by userID " + userID + " deleted from question " + question + " from questionSet " + questionSet);
-  return true;
+  if(0 < questionNum && questionNum <= qSet.questions.length){
+    var q = qSet.questions[questionNum - 1];
+    var ur = q.users_response;
+    ur.delete(userID);
+    ctx.reply("Deleted #" + questionNum + " from question set " + questionSet);
+    console.log("Deleted #" + questionNum + " from questionSet " + questionSet + " from: " + userID);
+    return true;
+  }else{
+    ctx.reply("Question number out of range");
+    console.log("Question number out of range");
+  }
 }
 
-function listUserResponseFromQuestion(questionSet, question, ctx){
+function printUserResponsesToQuestionSet(questionSet, id, ctx){
   
   var qSet = questionSets.get(questionSet);
-  var q = qSet.questions[question];
+  var questions = qSet.questions;
+  if(questions.length == 0){
+     ctx.reply("No questions in question set");
+     console.log("No questions in question set");
+  }else{
+     var print = "";
+     for(var i = 1; i <= questions.length; i++){
+        var q = questions[i - 1];
+        if(q.users_response.has(id)){
+          var res = q.users_response.get(id);
+          print += i + ". " + q.question + "\n" + res + "\n\n";
+        }else{
+          print += i + ". " + q.question + "\nNO ANSWER\n\n";
+        }
+     }
+     ctx.reply(print);
+  }
+}
+
+function listUserResponseFromQuestion(questionSet, questionNum, ctx){
+  
+  var qSet = questionSets.get(questionSet);
+  var q = qSet.questions[questionNum - 1];
   var ur = q.users_response;
   if(ur.size != 0){
     var print = "";
@@ -243,8 +309,9 @@ function User (id, name) {
     this.isAdmin = false;
     this.id = id;
     this.name = name;
-    this.state = "idle"; // idle, Qset, Ans
+    this.state = "idle"; // idle, qSet, addQ, addQSet, ans
     this.currQSet = null;
+    this.currQNum = -1;
     this.QSets = [];
 }
 
@@ -253,9 +320,28 @@ function getState(id){
   return currUser.state;
 }
 
-function getCurrQSet(id){
+function getCurrQSet(id){ 
   var currUser = userMap.get(id);
   return currUser.currQSet;
+}
+
+function setCurrQSet(id, qSet){ //null qSet for idling
+  
+  var currUser = userMap.get(id);
+  currUser.currQSet = qSet;
+  
+}
+
+function getCurrQNum(id){
+  
+  var currUser = userMap.get(id);
+  return currUser.currQNum;
+}
+
+function setCurrQNum(id, num){
+
+  var currUser = userMap.get(id);
+  currUser.currQNum = num;
 }
 
 function getQSets(id){
@@ -265,6 +351,9 @@ function getQSets(id){
 
 function setState (id, state) {
   var currUser = userMap.get(id);
+  
+  console.log(currUser.name + " state changed to " + state + ".");
+
   currUser.state = state;
 }
   
@@ -294,7 +383,7 @@ function initializeUserMap(){
         console.log(tempUser.name + " added as admin.");
     }
   
-    console.log("User map initialized");
+    console.log("User map initialized.");
   
     return tempMap;
 }
@@ -311,7 +400,7 @@ function help(id, ctx){
   
   result += "\n--- USER COMMANDS ---\n\n";
   
-  result += "/res to answer question sets or manage responses. \n";
+  result += "/ans to answer question sets or manage responses. \n";
   result += "/help to view the manual\n";    
   
   ctx.reply(result);
@@ -319,22 +408,52 @@ function help(id, ctx){
 }
 
 function printQSetOptions(id, ctx) {
-    var inlineKeyboardArray = [Markup.callbackButton('Add new Q set', "AddQSet")];
+    var inlineKeyboardArray = [];
     var qSets = getQSets(id);
   
+    inlineKeyboardArray.push([Markup.callbackButton('Add new Q set', "AddQSet")]);
+  
     if (qSets.length == 0) {
-        inlineKeyboardArray.push(Markup.callbackButton("No Q sets to show", "blank"));
+        inlineKeyboardArray.push([Markup.callbackButton("No Q sets to show", "blank")]);
     } else {
       qSets.forEach(function(value){
-        inlineKeyboardArray.push(Markup.callbackButton(value, "EditQSet " + value));
+        inlineKeyboardArray.push([Markup.callbackButton(value, "EditQSet " + value)]);
       })
     }
   
-    inlineKeyboardArray.push(Markup.callbackButton("Save and exit", "EXIT"));
+    inlineKeyboardArray.push([Markup.callbackButton("Save and Exit", "ExitQSetOptions")]);
   
-    return ctx.reply("Add a new question set\n\n OR \n\n Select a question set to edit", Markup.inlineKeyboard(inlineKeyboardArray).extra());
+    return ctx.reply("Add a new question set\n                  or\nSelect a question set to edit", Markup.inlineKeyboard(inlineKeyboardArray).extra());
 }
 
+function printQOptions(id, ctx) {
+    
+    var qSet = questionSets.get(getCurrQSet(id));
+    var inlineKeyboardArray = [];
+  
+    inlineKeyboardArray.push([Markup.callbackButton('Add Question', "AddQ"), Markup.callbackButton('Edit Question', "EditQ")]);
+    inlineKeyboardArray.push([Markup.callbackButton('Delete Question', "DelQ"), Markup.callbackButton('View Questions', "ViewQ")]);
+    
+    if(qSet.isLocked) {
+      inlineKeyboardArray.push([Markup.callbackButton('Unlock Q Set', "LockQSet")]);  
+    } else {
+      inlineKeyboardArray.push([Markup.callbackButton('Lock Q Set', "LockQSet")]);
+    }
+
+    inlineKeyboardArray.push([Markup.callbackButton('Save and Exit', "ExitQOptions")]);
+  
+    return ctx.reply("Select an option to edit your question set " + getCurrQSet(id), Markup.inlineKeyboard(inlineKeyboardArray).extra());
+}
+
+function printAnswerOptions(id, ctx){
+   var inlineKeyboardArray = [];
+  
+   inlineKeyboardArray.push([Markup.callbackButton('Add Answer', "AddAns"), Markup.callbackButton('Edit Answer', "EditAns")]);
+   inlineKeyboardArray.push([Markup.callbackButton('Delete Answer', "DelAns"), Markup.callbackButton('View Answers', "ViewAns")]);
+   inlineKeyboardArray.push([Markup.callbackButton('Save Answers and Exit', "ExitAns")]);
+  
+   return ctx.reply("Select an option to edit your answers to the question set " + getCurrQSet(id), Markup.inlineKeyboard(inlineKeyboardArray).extra());
+}
 function checkUniqueId(ctx){
     
     const id = ctx.from.id;
@@ -355,18 +474,111 @@ function checkUniqueId(ctx){
 
 
 bot.on("callback_query", (ctx) => {
+
+  console.log("Callback from " + ctx.from.first_name + " with " + ctx.callbackQuery.data);
+  
   var dataArr = ctx.callbackQuery.data.split(" ");
   var id = ctx.from.id;
   var choice = dataArr[0];
-  
+
   switch(choice){
     case "AddQSet":
-      ctx.reply("Enter name of QSet: ");
-      setState(id, "addQSet");      
-      return;
-    case "EditQSet":
+      setState(id, "addQSet");
       
+      ctx.reply("Enter name of new question set: ");
+            
+      return;
+      
+    case "EditQSet":
       var qSet = dataArr[1];
+      setState(id, "editQSet");
+      setCurrQSet(id, qSet);
+      
+      printQOptions(id, ctx);
+      
+      return;
+      
+    case "ExitQSetOptions":
+      setState(id, "idle");
+      ctx.reply("Save Successful \nExiting");
+      return;
+      
+    case "AddQ":
+      setState(id, "addQ");
+      ctx.reply("Type out your questions, then type /finish to stop.");
+      return;
+    
+    case "EditQ":
+      var questionSet = questionSets.get(getCurrQSet(id));
+      if(questionSet.questions.length == 0){
+        ctx.reply("No Questions :("); 
+        printQOptions(id, ctx);
+      }else{
+        setState(id, "editQ");
+        listQuestionsFromQuestionSet(getCurrQSet(id), ctx);
+        ctx.reply("Enter question number and the editted question seperated by a space.\n E.G \"7 Is SoCat cute?\"");
+      }
+      return;
+    
+    case "DelQ":
+      var questionSet = questionSets.get(getCurrQSet(id));
+      if(questionSet.questions.length == 0){
+        ctx.reply("No Questions :(");
+        printQOptions(id, ctx);
+      }else{
+        setState(id, "delQ");
+        listQuestionsFromQuestionSet(getCurrQSet(id), ctx);
+        ctx.reply("Enter question number to delete: ");
+      }
+      return;
+      
+    case "ViewQ":
+      listQuestionsFromQuestionSet(getCurrQSet(id), ctx)
+      printQOptions(id, ctx);
+      return;
+    
+    case "LockQSet":
+       var qSet = questionSets.get(getCurrQSet(id));
+       qSet.isLocked = !qSet.isLocked;
+       ctx.reply("Question Set is locked?: " + qSet.isLocked);
+       printQOptions(id, ctx);
+       return;
+      
+    case "ExitQOptions":
+      ctx.reply("Successfully saved and exit");
+      setState(id, "idle");
+      setCurrQSet(id, null);
+      return;
+      
+    case "AddAns":
+      var qSet = questionSets.get(getCurrQSet(id));
+      setCurrQNum(id, 1);
+      var currQNum = getCurrQNum(id);
+      ctx.reply(currQNum + ". " + qSet.questions[currQNum - 1].question);
+      setState(id, "addAns");
+      return;
+    
+    case "DelAns":
+      printUserResponsesToQuestionSet(getCurrQSet(id), id, ctx);
+      ctx.reply("Enter question number to be delete:");
+      setState(id, "delAns");
+      return;
+    
+    case "EditAns":
+      printUserResponsesToQuestionSet(getCurrQSet(id), id, ctx);
+      ctx.reply("Enter question number and the editted response seperated by a space.\n E.G \"1 Yes, I love cats\"");
+      setState(id, "editAns");
+      return;
+      
+    case "ViewAns":
+      printUserResponsesToQuestionSet(getCurrQSet(id), id, ctx);
+      printAnswerOptions(id, ctx);
+      return;
+      
+    case "ExitAns":
+      setCurrQSet(id, "idle");
+      setState(id, "idle");
+      ctx.reply("Succesfull save and exit");
       return;
   }
 })
@@ -395,11 +607,15 @@ bot.hears(/(.*)/, (ctx) => {
         help(id, ctx);
         return;
       
-      case "/res" :
-        setState(id, "res");
-        //Do ans protocol
+      case "/ans":
+        setState(id, "chooseAnsQSet");
+        ctx.reply("Enter question Set to answer: ");
         return;
       
+      case "/finish":
+        setState(id, "editQSet");
+        printQOptions(id, ctx);
+        return;
     default:
       textInput(ctx);
       return;
@@ -409,19 +625,92 @@ bot.hears(/(.*)/, (ctx) => {
 function textInput(ctx){
   const id = ctx.from.id;
   const state = getState(id);
-  const message = ctx.from.message;
+  const message = ctx.message.text;
   var currUser = userMap.get(id);
-  var qSets = getQSets(id);
+  var qSets = getQSets(id);  
   
   switch(state){
     case "addQSet":
       currUser.currQSet = message;
       qSets.push(message);
+      addQuestionSet(message, ctx)      
+      setState(id, "addQ");
       
+      ctx.reply("Type out your questions one after another, then type /finish to stop.");
       
+      return;
+    case "addQ":
+      addQuestionToQuestionSet(currUser.currQSet, message, ctx);
+      return;
       
-      setState(id, "AddQ");
+    case "delQ":
+      deleteQuestionFromQuestionSet(currUser.currQSet, message, ctx);
+      setState(id, "editQSet");
+      printQOptions(id, ctx);
+      return;
       
+    case "editQ":
+      var splitMessage = message.split(" ");
+      var questionNum = parseInt(splitMessage[0]);
+      var questionString = splitMessage.slice(1);
+      questionString = questionString.join(" ");
+      editQuestionFromQuestionSet(currUser.currQSet, questionNum, questionString, ctx);
+      setState(id, "editQSet");
+      printQOptions(id, ctx);
+      return;
+      
+    case "chooseAnsQSet":
+      if(questionSets.has(message)){
+         if(!questionSets.get(message).isLocked){
+           setCurrQSet(id, message);
+           setState(id, "ansQSet");
+           printAnswerOptions(id, ctx);
+         }else{
+            ctx.reply("Question Set " + message + " is locked for answering"); 
+         }
+      }else{
+         ctx.reply("Question Set " + message + " does not exist");
+        setState(id, "idle");
+      }
+      return;
+    
+    case "addAns":
+      
+      console.log("Inside addAns state from " + currUser.name);
+      
+      var currQNum = getCurrQNum(id);
+      var currQSet = getCurrQSet(id)
+      var qSet = questionSets.get(currQSet);
+      var questions = qSet.questions;
+      addUserResponseToQuestion(currQSet, currQNum, message, id, ctx);
+      currQNum = currQNum + 1;
+      setCurrQNum(id, currQNum);
+      if(currQNum <= questions.length){
+        ctx.reply(currQNum + ". " + questions[currQNum - 1].question);
+      }else{ //No More Questions
+        ctx.reply("You have finished answering. \n");
+        setCurrQNum(id, -1);
+        setState(id, "ansQSet");
+        printUserResponsesToQuestionSet(currQSet, id, ctx);
+        printAnswerOptions(id, ctx);
+      }
+      return;
+      
+    case "delAns":
+      deleteUserResponseFromQuestion(getCurrQSet(id), parseInt(message), id, ctx)
+      setState(id, "ansQSet");
+      printAnswerOptions(id, ctx);
+      return;
+      
+    case "editAns":
+      var currQSet = getCurrQSet(id);
+      var splitMessage = message.split(" ");
+      var questionNum = parseInt(splitMessage[0]);
+      var ansString = splitMessage.slice(1);
+      ansString = ansString.join(" ");
+      addUserResponseToQuestion(currQSet, questionNum, ansString, id, ctx);
+      setState(id, "ansQSet");
+      printAnswerOptions(id, ctx);
       return;
   }
 }
