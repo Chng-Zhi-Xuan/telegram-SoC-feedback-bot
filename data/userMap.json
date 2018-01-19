@@ -1,0 +1,22 @@
+{
+  "377961259": {
+    "isAdmin": true,
+    "id": "377961259",
+    "name": "Dominic",
+    "state": "idle",
+    "currQSet": "idle",
+    "currQNum": -1,
+    "QSets": [
+      "hello"
+    ]
+  },
+  "426938277": {
+    "isAdmin": true,
+    "id": "426938277",
+    "name": "Zhi Xuan",
+    "state": "idle",
+    "currQSet": "idle",
+    "currQNum": -1,
+    "QSets": []
+  }
+}

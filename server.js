@@ -1,24 +1,13 @@
-/*Recycle Bin
-
-function getNextQuestionSetID(ctx)     m.callbackButton('Add new question set', 'test{
-  if (typeof getNextQuestionSetID.nextID == 'undefined') {
-    getNextQuestionSetID.nextID = 0;
-    console.log('new ID chain started');
-  }
-  
-  getNextQuestionSetID.nextID++;
-  console.log('Returning requested qSet ID: ' + getNextQuestionSetID.nextID);
-  return getNextQuestionSetID.nextID;
-
-*/
 const Telegraf = require("telegraf");
 const Map = require("es6-map");
 const Extra = require('telegraf/extra');
 const Markup = require('telegraf/markup');
-const admins = [[377961259, "Dominic"], [426938277, "Zhi Xuan"]]
+const admins = [["377961259", "Dominic"], ["426938277", "Zhi Xuan"]]
 
 var userMap = initializeUserMap();
-var questionSets = new Map();
+var questionSets = require("data-store")("questionSets", {
+    cwd: "data"
+});
 
 const bot = new Telegraf(process.env.TOKEN);
 
@@ -45,7 +34,7 @@ function QuestionSet(questionSetName){
 
 function Question(questionString){
   this.question = questionString;
-  this.users_response = new Map();    //Map(User, Response)
+  this.users_response = [];    
 }
 
 function addQuestionSet(questionSetName, ctx){
@@ -222,18 +211,20 @@ function addUserResponseToQuestion(questionSet, questionNum, response, userID, c
   console.log("qSet: " + qSet.name);
   
   if(0 < questionNum && questionNum <= qSet.questions.length){
-    var q = qSet.questions[questionNum - 1];
+    var q = qSet.questions[questionNum - 1];    
     var ur = q.users_response;
-    if(ur.has(userID)){
+    if(mapHas(userID, ur)){
 
-      ur.set(userID, response);
-
+      //ur.set(userID, response);
+      mapSet(userID, response, ur);
+      
       ctx.reply(response + " overwrited in " + questionSet + " #" + questionNum);
       console.log(response + " overwrited in " + questionSet + " #" + questionNum + " from: " + userID);
 
     }else{
-      ur.set(userID, response);
-
+      //ur.set(userID, response);
+      mapSet(userID, response, ur);
+      
       //ctx.reply(response + " saved in " + questionSet + " #" + questionNum);
       console.log(response + " saved in " + questionSet + " #" + questionNum + " from: " + userID);
     }
@@ -250,7 +241,10 @@ function deleteUserResponseFromQuestion(questionSet, questionNum, userID, ctx){
   if(0 < questionNum && questionNum <= qSet.questions.length){
     var q = qSet.questions[questionNum - 1];
     var ur = q.users_response;
-    ur.delete(userID);
+    
+    //ur.delete(userID);
+    mapDel(userID, ur);
+    
     ctx.reply("Deleted #" + questionNum + " from question set " + questionSet);
     console.log("Deleted #" + questionNum + " from questionSet " + questionSet + " from: " + userID);
     return true;
@@ -259,6 +253,10 @@ function deleteUserResponseFromQuestion(questionSet, questionNum, userID, ctx){
     console.log("Question number out of range");
   }
 }
+
+// *********************************************************************************
+// *         -----------             PRINTING                 -------------        *
+// *********************************************************************************
 
 function printUserResponsesToQuestionSet(questionSet, id, ctx){
   
@@ -271,8 +269,9 @@ function printUserResponsesToQuestionSet(questionSet, id, ctx){
      var print = "";
      for(var i = 1; i <= questions.length; i++){
         var q = questions[i - 1];
-        if(q.users_response.has(id)){
-          var res = q.users_response.get(id);
+        var ur = q.users_response;
+        if(mapHas(id, ur) != -1){
+          var res = mapGet(id, ur);
           print += i + ". " + q.question + "\n" + res + "\n\n";
         }else{
           print += i + ". " + q.question + "\nNO ANSWER\n\n";
@@ -307,7 +306,7 @@ function listUserResponseFromQuestion(questionSet, questionNum, ctx){
 
 function User (id, name) {
     this.isAdmin = false;
-    this.id = id;
+    this.id = String(id);
     this.name = name;
     this.state = "idle"; // idle, qSet, addQ, addQSet, ans
     this.currQSet = null;
@@ -372,15 +371,19 @@ function initializeUserMap(){
     
     console.log("Creating new user map.");
   
-    var tempMap = new Map();
+    var tempMap = require("data-store")("userMap", {
+      User,
+      cwd: "data"
+    });
   
     for (var i = 0; i < admins.length; i++) {
+      
+      if (!tempMap.has(admins[i][0])){
         var tempUser = new User(admins[i][0], admins[i][1]);
         tempUser.isAdmin = true;
-      
         tempMap.set(admins[i][0], tempUser);
-        
         console.log(tempUser.name + " added as admin.");
+      }
     }
   
     console.log("User map initialized.");
@@ -456,7 +459,7 @@ function printAnswerOptions(id, ctx){
 }
 function checkUniqueId(ctx){
     
-    const id = ctx.from.id;
+    const id = String(ctx.from.id);
   
     if(!userMap.has(id)) {
         userMap.set(id, new User(id, ctx.from.first_name));
@@ -465,6 +468,66 @@ function checkUniqueId(ctx){
     return ;
 }
 
+function saveUserMap(id){
+    userMap.set(id, userMap.get(id)); 
+}
+
+function saveQSets(qSetName){
+    questionSets.set(qSetName, questionSets.get(qSetName));  
+}
+
+//returns index if found, else returns -1
+function mapHas(key, arr){
+  for (var i = 0; i < arr.length; i++){
+       if (arr[i][0] == key){
+          return i;
+       }
+  }  
+  return -1;
+
+}
+
+//pre-condition: key must exist
+function mapGet(key, arr){
+  for (var i = 0; i < arr.length; i++){
+    if (arr[i][0] == key) {
+      return arr[i][1];
+    }
+  }
+  
+  return null;
+}
+
+//replaces element if key exist, else pushes a new entry into map
+function mapSet(key, ele, arr){
+  
+  var duplicate = mapHas(key, arr);
+  
+  if (duplicate == -1) {
+    arr.push([key, ele]);  
+  } else {
+      arr[duplicate][1] = ele;
+      return null;
+  }
+  
+  return null;
+
+}
+
+function mapDel(key, arr){
+  
+  for (var i = 0; i < arr.length; i++){
+    if (arr[i][0] == key){
+      arr.splice(i, 1);
+      console.log("Removed key: " + key + ".");
+      
+      return null;
+    }
+  }
+  
+  console.log("mapDel key: " + key + " not found.");
+  return null;
+}
 
 
 // *********************************************************************************
@@ -478,7 +541,7 @@ bot.on("callback_query", (ctx) => {
   console.log("Callback from " + ctx.from.first_name + " with " + ctx.callbackQuery.data);
   
   var dataArr = ctx.callbackQuery.data.split(" ");
-  var id = ctx.from.id;
+  var id = String(ctx.from.id);
   var choice = dataArr[0];
 
   switch(choice){
@@ -493,14 +556,14 @@ bot.on("callback_query", (ctx) => {
       var qSet = dataArr[1];
       setState(id, "editQSet");
       setCurrQSet(id, qSet);
-      
       printQOptions(id, ctx);
       
       return;
       
     case "ExitQSetOptions":
       setState(id, "idle");
-      ctx.reply("Save Successful \nExiting");
+      userMap.set(id, userMap.get(id));
+      ctx.reply("Save Successful \n Exiting");
       return;
       
     case "AddQ":
@@ -545,9 +608,14 @@ bot.on("callback_query", (ctx) => {
        return;
       
     case "ExitQOptions":
-      ctx.reply("Successfully saved and exit");
+      saveUserMap(id);
+      saveQSets(getCurrQSet(id));
+      
       setState(id, "idle");
       setCurrQSet(id, null);
+            
+      ctx.reply("Successfully saved and exit");
+      
       return;
       
     case "AddAns":
@@ -578,7 +646,11 @@ bot.on("callback_query", (ctx) => {
     case "ExitAns":
       setCurrQSet(id, "idle");
       setState(id, "idle");
-      ctx.reply("Succesfull save and exit");
+
+      saveUserMap(id);
+      saveQSets(getCurrQSet(id));
+      
+      ctx.reply("Succesfully saved and exit");
       return;
   }
 })
@@ -587,7 +659,7 @@ bot.hears(/(.*)/, (ctx) => {
   
   var messageArr = ctx.message.text.split(" ");
   var command = messageArr[0];
-  const id = ctx.from.id;
+  const id = String(ctx.from.id);
   
   checkUniqueId(ctx);
   
@@ -623,7 +695,7 @@ bot.hears(/(.*)/, (ctx) => {
 })
 
 function textInput(ctx){
-  const id = ctx.from.id;
+  const id = String(ctx.from.id);
   const state = getState(id);
   const message = ctx.message.text;
   var currUser = userMap.get(id);

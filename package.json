@@ -12,10 +12,8 @@
   "dependencies": {
     "express": "^4.16.2",
     "telegraf": "^3.17.2",
-    "fs": "^0.0.2",
-    "fs-extra": "^5.0.0",
-    "file-system": "^2.2.2",
-    "es6-map": "^0.1.5"
+    "es6-map": "^0.1.5",
+    "data-store": "^1.0.0"
   },
   "engines": {
     "node": "8.x"
